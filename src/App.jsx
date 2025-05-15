@@ -7,9 +7,7 @@ const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Trang login */}
         <Route path="/" element={<Login />} />
-        {/* Trang dashboard */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
@@ -18,7 +16,6 @@ const App = () => {
 
 export default App;
 
-// ProtectedRoute để bảo vệ route dashboard
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   const role = localStorage.getItem('role');

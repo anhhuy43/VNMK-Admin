@@ -1,58 +1,141 @@
 import React, { useEffect, useState } from 'react';
+import { Table, Select, Button, message } from 'antd';
 import axios from 'axios';
 
 const Dashboard = () => {
   const [posts, setPosts] = useState([]);
-  const [error, setError] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState({});
+  const [isBlurred, setIsBlurred] = useState({});
 
   useEffect(() => {
     const fetchPosts = async () => {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:3000/api/admin/get-list-posts', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPosts(response.data.data);
-      console.log("🚀 ~ fetchPosts ~ response.data.data:", response.data.data)
-
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('http://localhost:3000/api/admin/get-list-posts', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setPosts(response.data.data);
+        console.log(response.data.data);
+      } catch {
+        message.error('Không thể lấy danh sách bài viết');
+      }
     };
-
     fetchPosts();
   }, []);
 
-  const handleHide = async (postId) => {
-    const token = localStorage.getItem('token');
-    await axios.post(`http://localhost:5000/api/admin/posts/${postId}/hide`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    alert('Post hidden!');
+  const handleChangeStatus = (postId, value) => {
+    setSelectedStatus((prevState) => ({
+      ...prevState,
+      [postId]: value,
+    }));
   };
 
-  const handleFeedback = async (postId) => {
-    const feedback = prompt('Enter your feedback:');
-    const token = localStorage.getItem('token');
-    await axios.post(`http://localhost:5000/api/admin/posts/${postId}/feedback`, { feedback }, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    alert('Feedback sent!');
+  const handleSubmit = async (postId) => {
+    const reason = selectedStatus[postId];
+    if (!reason) {
+      message.warning('You need to select before submitting!');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch(
+        '/api/admin/posts/status',
+        { postId, status: 'blurred', reason },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post._id === postId ? { ...post, status: 'blurred', reason } : post
+        )
+      );
+      setIsBlurred((prevState) => ({
+        ...prevState,
+        [postId]: true,
+      }));
+      message.success('Đã cập nhật trạng thái bài viết');
+    } catch {
+      message.error('Lỗi khi cập nhật trạng thái bài viết');
+    }
   };
+
+  const handleUnblur = async (postId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch(
+        '/api/admin/posts/status',
+        { postId, status: 'active', reason: null },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post._id === postId ? { ...post, status: 'active', reason: null } : post
+        )
+      );
+      setIsBlurred((prevState) => ({
+        ...prevState,
+        [postId]: false,
+      }));
+      message.success('Đã gỡ blur cho bài viết');
+    } catch {
+      message.error('Lỗi khi gỡ blur bài viết');
+    }
+  };
+
+  const columns = [
+    { title: 'Index', dataIndex: 'index', render: (_, __, index) => index + 1 },
+    { title: 'Name', dataIndex: ['userId', 'name'], key: 'name' },
+    { title: 'Title', dataIndex: 'title', key: 'title' },
+    { title: 'Description', dataIndex: 'description', key: 'description' },
+    {
+      title: 'Reason',
+      render: (text, record) => (
+        <Select
+          value={selectedStatus[record._id] || undefined}
+          placeholder="Select Reason"
+          style={{ width: 200 }}
+          onChange={(value) => handleChangeStatus(record._id, value)}
+          disabled={isBlurred[record._id]}
+        >
+          <Select.Option value="Thiếu thông tin">Thiếu thông tin</Select.Option>
+          <Select.Option value="Nghi vấn gian lận">Nghi vấn gian lận</Select.Option>
+          <Select.Option value="Clone Account">Acc clone</Select.Option>
+        </Select>
+      ),
+    },
+    {
+      title: 'Hành động',
+      render: (text, record) => (
+        <>
+          <Button
+            type="primary"
+            onClick={() => handleSubmit(record._id)}
+            disabled={isBlurred[record._id]}
+          >
+            Submit
+          </Button>
+          {isBlurred[record._id] && (
+            <Button
+              danger
+              onClick={() => handleUnblur(record._id)}
+              style={{ marginLeft: '10px' }}
+            >
+              Hủy Blur
+            </Button>
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
-    <div>
-      <h2>Admin Dashboard</h2>
-      <ul>
-        {posts.map(post => (
-          <li key={post.id} style={{ listStyle: "none"}}>
-            <h1>{post.userId.firstName}{post.userId.lastName}</h1>
-            <span>{post.userId.email}</span>
-            <h2>{post.name}</h2>
-            <p>{post.description}</p>
-            <p>{post.createAtFormatted}</p>
-            <button onClick={() => handleHide(post.id)}>Hide</button>
-            <button onClick={() => handleFeedback(post.id)}>Feedback</button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Table
+      dataSource={posts.map((post, index) => ({ ...post, key: index }))}
+      columns={columns}
+      rowClassName="editable-row"
+    />
   );
 };
 
